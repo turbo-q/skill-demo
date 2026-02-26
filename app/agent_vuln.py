@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any, List, Optional
 
 from deepagents import create_deep_agent
-from deepagents.backends.filesystem import FilesystemBackend
+from deepagents.backends import LocalShellBackend
 from deepagents.middleware.skills import SkillsMiddleware
 from langchain_core.tools import BaseTool
 from langgraph.checkpoint.memory import MemorySaver
@@ -36,6 +36,7 @@ BASE_SYSTEM_PROMPT = """
 使用工具时：
 - 优先用 tcp_port_scan 识别开放端口，再针对性用 http_get 分析 Web 服务。
 - 技能知识会根据上下文自动注入，请结合技能说明和工具验证。
+- 当用户需要执行某技能的脚本时，使用 execute 运行脚本。execute 的工作目录是项目根，请用**相对路径**直接执行脚本（不要用 cd，不要用 /app 等绝对路径），例如：SKILL_CONTEXT='{"target":"example.com"}' python3 app/skills/scan-report/scripts/generate_template.py
 """
 
 
@@ -63,10 +64,14 @@ def get_agent(
     if checkpointer is None:
         checkpointer = MemorySaver()
 
-    # 项目根目录：read_file 等文件工具可访问项目下所有路径
+    # 项目根目录：read_file / execute 等工具以 root_dir 为工作根
     project_root = Path(__file__).resolve().parent.parent
-    backend = FilesystemBackend(root_dir=str(project_root))
-    # 技能从 app/skills 加载（相对 project_root）
+    backend = LocalShellBackend(
+        root_dir=str(project_root),
+        virtual_mode=True,
+        inherit_env=True,
+    )
+    # 技能从 app/skills 加载（相对 project_root）；Agent 可用 execute 执行技能 script
     skills_middleware = SkillsMiddleware(backend=backend, sources=["app/skills"])
 
     model_arg: Any = model_name

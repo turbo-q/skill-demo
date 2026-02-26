@@ -18,19 +18,9 @@ export OPENAI_API_KEY="your-key"
 
 （未安装 uv 时：`pip install uv` 或见 [uv 文档](https://docs.astral.sh/uv/)）
 
-## 运行 CLI 示例
-
-```bash
-uv run python vuln_scan_agent_example.py
-```
-
 ## 启动对话 UI
 
-```bash
-uv run web
-```
-
-或：`uv run python run_web.py`、`uv run uvicorn app.web:app --reload --host 0.0.0.0 --port 8000`
+`uv run python run_web.py`、`uv run uvicorn app.web:app --reload --host 0.0.0.0 --port 8000`
 
 浏览器打开 http://localhost:8000 ，使用完整 UI：侧栏选择/新建会话、输入用户 ID、发送消息；新会话自动创建，点击会话可加载历史。
 
@@ -45,11 +35,6 @@ uv run web
 | `app/skills/web_basic_scan/` | 基础 Web 漏洞扫描 | 「对 example.com 做一次 Web 扫描」 |
 | `app/skills/ping-check/`    | 连通性检查       | 「帮我检查 127.0.0.1 是否通」「ping 一下 example.com」 |
 
-### 2. 启动服务
-
-```bash
-uv run web
-```
 
 ### 3. 在页面配置模型
 
@@ -74,7 +59,7 @@ uv run web
 - **默认（INFO）**：每次 LLM 调用会打「消息数 + 前几条摘要」；每次工具调用会打「工具名 + 入参/结果摘要」。
 - **完整 prompt（含技能注入）**：先设置环境变量再启动：
   ```bash
-  LOG_LEVEL=DEBUG uv run web
+  LOG_LEVEL=DEBUG uv run python run_web.py
   ```
   控制台会输出本次发给模型的完整 messages（system、历史、当前轮），便于确认 SkillsMiddleware 注入了哪些技能内容。
 
