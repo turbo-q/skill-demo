@@ -148,6 +148,21 @@ async def list_sessions(user_id: str = "default", limit: int = 20, offset: int =
     return {"user_id": user_id, "total": total, "sessions": sessions}
 
 
+@app.delete("/api/sessions/{session_id}")
+async def delete_session(session_id: str, user_id: str = "default"):
+    """删除该会话及其全部消息，彻底清除。仅当会话属于当前 user_id 时允许删除。"""
+    storage = get_storage_manager()
+    ctx = await storage.context.get_session(session_id)
+    if not ctx:
+        raise HTTPException(status_code=404, detail="会话不存在")
+    if ctx.user_id != user_id:
+        raise HTTPException(status_code=404, detail="会话不存在")
+    ok = await storage.backend.delete_session(session_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="会话不存在")
+    return {"deleted": session_id}
+
+
 @app.get("/api/history")
 async def history(session_id: str, limit: int = 50):
     storage = get_storage_manager()

@@ -198,12 +198,22 @@
         sessionListEmptyEl.classList.add('hidden');
         data.sessions.forEach(s => {
           const li = document.createElement('li');
+          li.className = 'flex items-center gap-1 group';
           const a = document.createElement('a');
           a.href = '#';
-          a.className = 'block rounded-lg px-3 py-2 text-sm hover:bg-slate-700 truncate ' + (s.session_id === currentSessionId ? 'bg-slate-700 text-cyan-400' : '');
+          a.className = 'flex-1 min-w-0 rounded-lg px-3 py-2 text-sm hover:bg-slate-700 truncate ' + (s.session_id === currentSessionId ? 'bg-slate-700 text-cyan-400' : '');
           a.textContent = (s.session_id.slice(0, 8) + '…') + ' (' + (s.message_count || 0) + ' 条)';
           a.addEventListener('click', e => { e.preventDefault(); selectSession(s.session_id); });
           li.appendChild(a);
+          const delBtn = document.createElement('button');
+          delBtn.type = 'button';
+          delBtn.className = 'shrink-0 rounded p-1.5 text-slate-400 hover:text-red-400 hover:bg-slate-700 opacity-0 group-hover:opacity-100 transition-opacity';
+          delBtn.title = '删除会话';
+          delBtn.innerHTML = '×';
+          delBtn.style.fontSize = '1.25rem';
+          delBtn.style.lineHeight = '1';
+          delBtn.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); deleteSession(s.session_id); });
+          li.appendChild(delBtn);
           sessionListEl.appendChild(li);
         });
       } catch (e) {
@@ -228,6 +238,25 @@
     });
 
     refreshSessionsBtn.addEventListener('click', loadSessions);
+
+    async function deleteSession(sid) {
+      if (!confirm('确定删除该会话？将同时删除该会话下的全部消息，且不可恢复。')) return;
+      const uid = userIdEl.value.trim() || 'default';
+      try {
+        const r = await fetch(API + '/api/sessions/' + encodeURIComponent(sid) + '?user_id=' + encodeURIComponent(uid), { method: 'DELETE' });
+        if (!r.ok) {
+          const data = await r.json().catch(() => ({}));
+          throw new Error(data.detail || '删除失败');
+        }
+        if (currentSessionId === sid) {
+          setCurrentSession('');
+          messagesEl.innerHTML = '';
+        }
+        loadSessions();
+      } catch (e) {
+        alert('删除失败: ' + e.message);
+      }
+    }
 
     function fillModelSelect(models, selectedId) {
       configModelEl.innerHTML = '';

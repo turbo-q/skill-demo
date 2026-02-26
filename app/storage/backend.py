@@ -47,6 +47,11 @@ class PersistenceBackend(ABC):
     ) -> tuple[List[Dict[str, Any]], int]:
         pass
 
+    @abstractmethod
+    async def delete_session(self, session_id: str) -> bool:
+        """删除会话及其全部消息，彻底清除。返回是否删除成功（会话存在则成功）。"""
+        pass
+
 
 class SessionContext:
     """会话上下文，与 context_manager 中的 SessionContext 结构一致。"""
@@ -171,6 +176,24 @@ class SQLiteBackend(PersistenceBackend):
             return out, total
         finally:
             session.close()
+
+    def _delete_session_sync(self, session_id: str) -> bool:
+        session = self._session_factory()
+        try:
+            row = session.query(SessionModel).get(session_id)
+            if not row:
+                return False
+            session.query(ConversationMessageModel).filter(
+                ConversationMessageModel.session_id == session_id
+            ).delete(synchronize_session=False)
+            session.delete(row)
+            session.commit()
+            return True
+        finally:
+            session.close()
+
+    async def delete_session(self, session_id: str) -> bool:
+        return await self._run_sync(self._delete_session_sync, session_id)
 
     async def save_context(self, context: SessionContext) -> None:
         await self._run_sync(self._save_context_sync, context)
