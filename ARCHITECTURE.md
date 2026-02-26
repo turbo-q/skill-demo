@@ -16,9 +16,9 @@ agent = get_agent()
 ```
 
 **特点**：
-- ✅ **Middleware 链**：TodoList（默认） + Skills（自定义） + Summarization（默认）
-- ✅ **Checkpoint**：InMemorySaver（thread_id = session_id），支持多轮对话状态恢复
-- ✅ **Skills 自动注入**：由 `SkillsMiddleware` 从 `app/skills/` 加载 SKILL.md
+- ✅ **Middleware**：显式配置 **SkillsMiddleware**（从 `app/skills/` 加载 SKILL.md）
+- ✅ **Checkpoint**：MemorySaver（thread_id = session_id），支持多轮对话状态恢复
+- ✅ **Backend**：LocalShellBackend（项目根为 root_dir），提供文件系统工具 + execute 执行脚本
 
 ### 2. Skills 管理（自动注入）
 
@@ -26,31 +26,33 @@ agent = get_agent()
 
 ```python
 from deepagents.middleware.skills import SkillsMiddleware
-from deepagents.backends.filesystem import FilesystemBackend
+from deepagents.backends import LocalShellBackend
 
-skills_dir = Path(__file__).resolve().parent / "skills"
-backend = FilesystemBackend(root_dir=str(skills_dir))
-skills_middleware = SkillsMiddleware(backend=backend, sources=["."])
+project_root = Path(__file__).resolve().parent.parent
+backend = LocalShellBackend(root_dir=str(project_root), virtual_mode=True, inherit_env=True)
+skills_middleware = SkillsMiddleware(backend=backend, sources=["app/skills"])
 ```
 
 **技能目录结构**：
 ```
 app/skills/
-  web_basic_scan/
-    SKILL.md           # 技能定义（YAML front-matter + Markdown 说明）
+  ping-check/
+    SKILL.md           # 连通性检查
+  scan-report/
+    SKILL.md           # 报告模板（execute 执行脚本示例）
     scripts/
-      checklist.py     # 可选：可执行脚本
+      generate_template.py
 ```
 
 **SKILL.md 格式**：
 ```yaml
 ---
-id: web_basic_scan
-name: 基础 Web 漏洞扫描流程
-description: 适用于对单个 Web 站点进行初步安全扫描
-tags: [web, vuln, scan]
-tools: [tcp_port_scan, http_get]
-script: scripts/checklist.py  # 可选
+id: scan_report
+name: scan-report
+description: 生成漏洞扫描报告模板
+tags: [report, template]
+tools: [execute]
+script: scripts/generate_template.py  # 可选，由 execute 以项目根相对路径执行
 ---
 
 详细的技能说明...
@@ -63,7 +65,7 @@ script: scripts/checklist.py  # 可选
 
 ### 3. Checkpoint 持久化
 
-使用 LangGraph checkpoint（`InMemorySaver`）：
+使用 LangGraph checkpoint（`MemorySaver`）：
 
 ```python
 config = {"configurable": {"thread_id": session_id}}
@@ -133,21 +135,14 @@ tools = build_vuln_scan_tools()
 
 **工具列表**：
 - `tcp_port_scan`: TCP 端口扫描
-- `http_get`: HTTP 探测
+- `http_get`: HTTP 探测  
+- `execute`: 由 LocalShellBackend 提供，在项目根下执行 shell 命令（用于运行技能脚本等）
 
 ## Middleware 链
 
-`create_deep_agent` 的完整 middleware 链：
+本项目显式传入 **SkillsMiddleware**：
 
-1. **TodoListMiddleware**（默认）：自动管理任务列表
-2. **SkillsMiddleware**（自定义）：自动注入技能知识
-3. **SummarizationMiddleware**（默认）：自动摘要长对话
-
-其他默认 middleware：
-- FilesystemMiddleware
-- SubAgentMiddleware
-- AnthropicPromptCachingMiddleware
-- PatchToolCallsMiddleware
+- **SkillsMiddleware**：从 `app/skills/` 加载 SKILL.md，按上下文注入技能说明；技能可配置 `script`，由 Agent 通过 **execute**（LocalShellBackend）执行。
 
 ## 项目结构
 
@@ -170,10 +165,12 @@ app/
     backend.py           # SQLiteBackend
   skills/                # 技能目录（由 SkillsMiddleware 自动加载）
     README.md
-    web_basic_scan/
+    ping-check/
+      SKILL.md
+    scan-report/
       SKILL.md
       scripts/
-        checklist.py
+        generate_template.py
 
 frontend/
   index.html             # 完整对话 UI
