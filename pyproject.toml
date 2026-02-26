@@ -1,0 +1,22 @@
+[project]
+name = "skill-demo"
+version = "0.1.0"
+description = "漏洞扫描 Agent 示例（Skill + Tools + 完整 UI）"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "langchain-openai>=0.2.0",
+    "langgraph>=0.2.0",
+    "langchain-core>=0.3.0",
+    "langchain>=0.2.0",
+    "deepagents>=0.4.0",
+    "httpx>=0.27.0",
+    "SQLAlchemy>=2.0.0",
+    "PyYAML>=6.0.0",
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "sse-starlette>=2.0.0",
+]
+
+[project.scripts]
+web = "run_web:main"
