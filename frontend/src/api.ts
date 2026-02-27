@@ -1,4 +1,4 @@
-import type { ChatMessage, LlmConfig, SessionSummary, ToolCall } from "./types";
+import type { ChatMessage, LlmConfig, SessionSummary, SkillSummary, ToolCall } from "./types";
 
 const API_BASE = "";
 
@@ -82,5 +82,10 @@ export async function fetchModels(params?: {
       : { method: "GET" },
   );
   return data.models || [];
+}
+
+export async function fetchSkills(): Promise<SkillSummary[]> {
+  const data = await fetchJson<SkillSummary[]>("/api/skills");
+  return data;
 }
 

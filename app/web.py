@@ -11,13 +11,14 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from app.db import init_db
+from app.db import get_db_session, init_db
 from app.run import run
 from app.storage import get_storage_manager, initialize_storage
+from app.models import SkillModel
 
 init_db()
 
@@ -112,6 +113,13 @@ class ModelsRequest(BaseModel):
     api_key: Optional[str] = None
 
 
+class SkillSummary(BaseModel):
+  id: str
+  name: str
+  description: str
+  tags: list[str]
+
+
 @app.get("/api/config/models")
 async def list_models_from_config():
     """根据已保存的 base_url / api_key 拉取模型列表。"""
@@ -171,6 +179,18 @@ async def history(session_id: str, limit: int = 50):
         "session_id": session_id,
         "messages": [{"role": m["role"], "content": m["content"]} for m in messages],
     }
+
+
+@app.get("/api/skills", response_model=list[SkillSummary])
+async def list_skills(db=Depends(get_db_session)):
+    """列出已索引的技能，用于前端展示 Skill 列表。"""
+    rows = db.query(SkillModel).order_by(SkillModel.created_at.desc()).all()
+    out: list[SkillSummary] = []
+    for r in rows:
+        raw_tags = (r.tags or "").strip()
+        tags = [t for t in (raw_tags.split(",") if raw_tags else []) if t]
+        out.append(SkillSummary(id=r.id, name=r.name, description=r.description, tags=tags))
+    return out
 
 
 if FRONTEND_DIR.is_dir():

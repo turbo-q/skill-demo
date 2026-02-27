@@ -24,3 +24,10 @@ export type LlmConfig = {
   api_key_set: boolean;
 };
 
+export type SkillSummary = {
+  id: string;
+  name: string;
+  description: string;
+  tags: string[];
+};
+

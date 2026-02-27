@@ -5,13 +5,21 @@ import {
   fetchHistory,
   fetchModels,
   fetchSessions,
+  fetchSkills,
   sendChat,
   updateConfig,
 } from "./api";
-import type { ChatMessage, LlmConfig, SessionSummary } from "./types";
+import type {
+  ChatMessage,
+  LlmConfig,
+  SessionSummary,
+  SkillSummary,
+} from "./types";
 import Sidebar from "./components/Sidebar";
 import MessageList from "./components/MessageList";
 import MessageInput from "./components/MessageInput";
+import SkillList from "./components/SkillList";
+import SettingsPanel from "./components/SettingsPanel";
 
 const App: React.FC = () => {
   const [userId, setUserId] = useState("default");
@@ -28,6 +36,10 @@ const App: React.FC = () => {
   const [configApiKey, setConfigApiKey] = useState("");
   const [configLoading, setConfigLoading] = useState(false);
   const [modelsLoading, setModelsLoading] = useState(false);
+  const [skills, setSkills] = useState<SkillSummary[]>([]);
+  const [activeTab, setActiveTab] = useState<"chat" | "skills" | "settings">(
+    "chat",
+  );
 
   const prettyCurrentSession = useMemo(() => {
     if (!currentSessionId) return "未选择";
@@ -138,7 +150,7 @@ const App: React.FC = () => {
   }
 
   async function handleSaveConfig() {
-    const body: Record<string, unknown> = {
+    const body: { model: string; base_url: string; api_key?: string } = {
       model: configModel,
       base_url: configBaseUrl.trim(),
     };
@@ -160,66 +172,131 @@ const App: React.FC = () => {
     loadSessions();
   }
 
+  async function loadSkills() {
+    const list = await fetchSkills();
+    setSkills(list);
+  }
+
   useEffect(() => {
-    loadSessions();
-    loadConfig();
+    void loadSessions();
+    void loadConfig();
+    void loadSkills();
   }, []);
 
   return (
     <div className="bg-slate-900 text-slate-100 min-h-screen flex flex-col">
-      <header className="border-b border-slate-700 px-4 py-3 flex items-center gap-3 shrink-0">
-        <span className="font-semibold text-lg">漏洞扫描 Agent</span>
-        <span className="text-slate-400 text-sm">Skill · 工具 · 会话</span>
+      <header className="border-b border-slate-700 px-4 py-3 flex items-center justify-between gap-4 shrink-0">
+        <div className="flex items-center gap-3">
+          <span className="font-semibold text-lg">漏洞扫描 Agent</span>
+          <span className="text-slate-400 text-sm">Skill · 工具 · 会话</span>
+        </div>
+        <nav className="flex items-center gap-1 text-sm">
+          <button
+            type="button"
+            className={
+              "px-3 py-1.5 rounded-full border " +
+              (activeTab === "chat"
+                ? "border-cyan-500 bg-cyan-600/20 text-cyan-200"
+                : "border-transparent text-slate-300 hover:bg-slate-800")
+            }
+            onClick={() => setActiveTab("chat")}
+          >
+            对话
+          </button>
+          <button
+            type="button"
+            className={
+              "px-3 py-1.5 rounded-full border " +
+              (activeTab === "skills"
+                ? "border-cyan-500 bg-cyan-600/20 text-cyan-200"
+                : "border-transparent text-slate-300 hover:bg-slate-800")
+            }
+            onClick={() => setActiveTab("skills")}
+          >
+            技能
+          </button>
+          <button
+            type="button"
+            className={
+              "px-3 py-1.5 rounded-full border " +
+              (activeTab === "settings"
+                ? "border-cyan-500 bg-cyan-600/20 text-cyan-200"
+                : "border-transparent text-slate-300 hover:bg-slate-800")
+            }
+            onClick={() => setActiveTab("settings")}
+          >
+            设置
+          </button>
+        </nav>
       </header>
 
-      <div className="flex flex-1 min-h-0">
-        {/* 侧栏 */}
-        <Sidebar
-          userId={userId}
-          onUserIdChange={setUserId}
-          config={config}
-          models={models}
-          configModel={configModel}
-          configBaseUrl={configBaseUrl}
-          configApiKey={configApiKey}
-          configLoading={configLoading}
-          modelsLoading={modelsLoading}
-          onConfigModelChange={setConfigModel}
-          onConfigBaseUrlChange={setConfigBaseUrl}
-          onConfigApiKeyChange={setConfigApiKey}
-          onSaveConfig={handleSaveConfig}
-          onFetchModels={() => loadModels(true)}
-          sessions={sessions}
-          currentSessionId={currentSessionId}
-          onNewChat={handleNewChat}
-          onRefreshSessions={loadSessions}
-          onSelectSession={handleSelectSession}
-          onDeleteSession={handleDeleteSession}
-        />
+      {activeTab === "chat" && (
+        <div className="flex flex-1 min-h-0">
+          <Sidebar
+            userId={userId}
+            onUserIdChange={setUserId}
+            sessions={sessions}
+            currentSessionId={currentSessionId}
+            onNewChat={handleNewChat}
+            onRefreshSessions={loadSessions}
+            onSelectSession={handleSelectSession}
+            onDeleteSession={handleDeleteSession}
+          />
 
-        {/* 主区 */}
-        <main className="flex-1 flex flex-col min-w-0">
-          <div className="border-b border-slate-700 px-4 py-2 flex items-center gap-2 shrink-0">
-            <span className="text-slate-400 text-sm">当前会话：</span>
-            <code className="text-cyan-400 text-sm truncate flex-1">
-              {prettyCurrentSession}
-            </code>
-          </div>
+          <main className="flex-1 flex flex-col min-w-0">
+            <div className="border-b border-slate-700 px-4 py-2 flex items-center gap-2 shrink-0">
+              <span className="text-slate-400 text-sm">当前会话：</span>
+              <code className="text-cyan-400 text-sm truncate flex-1">
+                {prettyCurrentSession}
+              </code>
+            </div>
 
-          <MessageList messages={messages} />
-          <MessageInput
-            value={input}
-            onChange={setInput}
-            onSubmit={handleSend}
-            disabled={sending}
-            placeholder={
-              currentSessionId
-                ? "继续输入消息…"
-                : "输入消息，发送将自动创建新会话"
-            }
+            <MessageList messages={messages} />
+            <MessageInput
+              value={input}
+              onChange={setInput}
+              onSubmit={handleSend}
+              disabled={sending}
+              placeholder={
+                currentSessionId
+                  ? "继续输入消息…"
+                  : "输入消息，发送将自动创建新会话"
+              }
+            />
+          </main>
+        </div>
+      )}
+
+      {activeTab === "skills" && (
+        <main className="flex-1 min-h-0 px-4 py-4">
+          <h2 className="text-sm font-semibold text-slate-50 mb-3">
+            已加载的技能
+          </h2>
+          <p className="text-xs text-slate-400 mb-4">
+            这些技能由 SkillsMiddleware 从后端技能仓库中自动加载，你可以在这里快速查看有哪些可用能力。
+          </p>
+          <SkillList skills={skills} />
+        </main>
+      )}
+
+      {activeTab === "settings" && (
+        <main className="flex-1 min-h-0">
+          <SettingsPanel
+            config={config}
+            models={models}
+            configModel={configModel}
+            configBaseUrl={configBaseUrl}
+            configApiKey={configApiKey}
+            configLoading={configLoading}
+            modelsLoading={modelsLoading}
+            onConfigModelChange={setConfigModel}
+            onConfigBaseUrlChange={setConfigBaseUrl}
+            onConfigApiKeyChange={setConfigApiKey}
+            onSaveConfig={handleSaveConfig}
+            onFetchModels={() => loadModels(true)}
           />
         </main>
-      </div>
+      )}
     </div>
   );
 };
