@@ -11,3 +11,7 @@ wheels/
 
 # db
 *.db
+
+# font
+frontend/dist/
+node_modules/

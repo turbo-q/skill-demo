@@ -1,0 +1,20 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-slate-900 text-slate-100;
+}
+
+.msg-content pre {
+  @apply whitespace-pre-wrap break-words rounded bg-black/20 p-2 text-sm;
+}
+
+.msg-content p {
+  @apply my-1;
+}
+
+.msg-content code {
+  @apply rounded bg-black/20 px-1 text-sm;
+}
+

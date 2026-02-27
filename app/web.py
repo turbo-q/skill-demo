@@ -27,7 +27,7 @@ logging.basicConfig(level=_log_level, format="%(levelname)s %(name)s %(message)s
 for _name in ("app.callbacks", "app.run"):
     logging.getLogger(_name).setLevel(_log_level)
 
-FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
+FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend" / "dist"
 
 
 @asynccontextmanager
@@ -177,8 +177,10 @@ if FRONTEND_DIR.is_dir():
     app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="frontend")
 else:
     from fastapi.responses import HTMLResponse
+
     @app.get("/", response_class=HTMLResponse)
     async def _fallback_index():
         return """<!DOCTYPE html><html><head><meta charset="UTF-8"><title>漏洞扫描 Agent</title></head><body>
-        <p>未找到 frontend 目录，请从项目根运行并保留 <code>frontend/</code>。</p>
+        <p>未找到已构建的前端资源，请先执行 <code>cd frontend &amp;&amp; npm install &amp;&amp; npm run build</code>。</p>
         <p><a href="/docs">API 文档</a></p></body></html>"""
+

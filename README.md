@@ -21,7 +21,20 @@ export OPENAI_API_KEY="your-key"
 
 ## 启动对话 UI
 
-`uv run python run_web.py`、`uv run uvicorn app.web:app --reload --host 0.0.0.0 --port 8000`
+1. 构建前端（React）：
+
+```bash
+cd frontend
+npm install
+npm run build
+```
+
+2. 启动后端 + 静态资源：
+
+```bash
+cd ..
+uv run python run_web.py
+```
 
 浏览器打开 http://localhost:8000 ，使用完整 UI：侧栏选择/新建会话、输入用户 ID、发送消息；新会话自动创建，点击会话可加载历史。
 
@@ -79,5 +92,6 @@ deepagents 官方更推荐用 [LangSmith](https://smith.langchain.com/) 做完�
 - `app/agent_vuln.py`：Agent 构造函数（`get_agent()`），使用 `create_deep_agent` + Skills 中间件 + LangGraph checkpoint。
 - `app/run.py`：主流程，封装 session 管理 + 历史加载 + agent 调用 + 消息存储。
 - `app/storage/`：StorageManager + ContextManager + SQLite Backend，会话与消息持久化。
-- `app/web.py`：FastAPI 对话 API（`/api/chat`、`/api/sessions`、`/api/history`），根路径挂载 `frontend/`。
-- `frontend/index.html`：完整对话 UI（侧栏 + 会话列表 + 消息区 + 输入）。
+- `app/web.py`：FastAPI 对话 API（`/api/chat`、`/api/sessions`、`/api/history`），根路径挂载 `frontend/dist`。
+- `frontend/`：React 前端工程，使用 Vite 构建，`npm run build` 后输出到 `frontend/dist` 并由后端静态转发。
+
