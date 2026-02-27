@@ -11,14 +11,14 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from app.db import get_db_session, init_db
+from app.db import init_db
 from app.run import run
 from app.storage import get_storage_manager, initialize_storage
-from app.models import SkillModel
+import yaml
 
 init_db()
 
@@ -114,10 +114,10 @@ class ModelsRequest(BaseModel):
 
 
 class SkillSummary(BaseModel):
-  id: str
-  name: str
-  description: str
-  tags: list[str]
+    id: str
+    name: str
+    description: str
+    tags: list[str]
 
 
 @app.get("/api/config/models")
@@ -182,15 +182,48 @@ async def history(session_id: str, limit: int = 50):
 
 
 @app.get("/api/skills", response_model=list[SkillSummary])
-async def list_skills(db=Depends(get_db_session)):
-    """列出已索引的技能，用于前端展示 Skill 列表。"""
-    rows = db.query(SkillModel).order_by(SkillModel.created_at.desc()).all()
-    out: list[SkillSummary] = []
-    for r in rows:
-        raw_tags = (r.tags or "").strip()
-        tags = [t for t in (raw_tags.split(",") if raw_tags else []) if t]
-        out.append(SkillSummary(id=r.id, name=r.name, description=r.description, tags=tags))
-    return out
+async def list_skills() -> list[SkillSummary]:
+    """从 app/skills 目录读取 SKILL.md，返回技能列表（不依赖数据库）。"""
+    skills_dir = Path(__file__).resolve().parent / "skills"
+    results: list[SkillSummary] = []
+    if not skills_dir.is_dir():
+        return results
+
+    for child in sorted(skills_dir.iterdir()):
+        skill_file = child / "SKILL.md"
+        if not skill_file.is_file():
+            continue
+        text = skill_file.read_text(encoding="utf-8")
+        # 解析 YAML front-matter
+        meta: dict = {}
+        if text.lstrip().startswith("---"):
+            try:
+                _, rest = text.split("---", 1)
+                yaml_part, *_ = rest.split("---", 1)
+                meta = yaml.safe_load(yaml_part) or {}
+            except Exception:
+                meta = {}
+
+        sid = str(meta.get("id") or child.name)
+        name = str(meta.get("name") or sid)
+        desc = str(meta.get("description") or "").strip()
+        raw_tags = meta.get("tags") or []
+        if isinstance(raw_tags, str):
+            tags = [t for t in (x.strip() for x in raw_tags.split(",")) if t]
+        elif isinstance(raw_tags, (list, tuple)):
+            tags = [str(t) for t in raw_tags if str(t).strip()]
+        else:
+            tags = []
+
+        results.append(
+            SkillSummary(
+                id=sid,
+                name=name,
+                description=desc,
+                tags=tags,
+            )
+        )
+    return results
 
 
 if FRONTEND_DIR.is_dir():
