@@ -6,10 +6,15 @@ import {
   fetchModels,
   fetchSessions,
   fetchSkills,
+  login,
+  logout,
+  me,
+  register,
   sendChat,
   updateConfig,
 } from "./api";
 import type {
+  AuthUser,
   ChatMessage,
   LlmConfig,
   SessionSummary,
@@ -20,6 +25,7 @@ import MessageList from "./components/MessageList";
 import MessageInput from "./components/MessageInput";
 import SkillList from "./components/SkillList";
 import SettingsPanel from "./components/SettingsPanel";
+import AuthDialogs from "./components/AuthDialogs";
 
 const App: React.FC = () => {
   const [userId, setUserId] = useState("default");
@@ -40,6 +46,8 @@ const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<"chat" | "skills" | "settings">(
     "chat",
   );
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
 
   const prettyCurrentSession = useMemo(() => {
     if (!currentSessionId) return "未选择";
@@ -49,7 +57,7 @@ const App: React.FC = () => {
   }, [currentSessionId]);
 
   async function loadSessions() {
-    const list = await fetchSessions(userId);
+    const list = await fetchSessions();
     setSessions(list);
   }
 
@@ -72,7 +80,7 @@ const App: React.FC = () => {
     ) {
       return;
     }
-    await deleteSessionApi(sessionId, userId);
+    await deleteSessionApi(sessionId);
     if (currentSessionId === sessionId) {
       setCurrentSessionId("");
       setMessages([]);
@@ -84,14 +92,19 @@ const App: React.FC = () => {
     e.preventDefault();
     const text = input.trim();
     if (!text || sending) return;
-    const localUserId = (userId || "").trim() || undefined;
+    if (!currentUser) {
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: "请先登录后再发送消息。" },
+      ]);
+      return;
+    }
     setSending(true);
     setMessages((prev) => [...prev, { role: "user", content: text }]);
     setInput("");
     try {
       const data = await sendChat({
         sessionId: currentSessionId || undefined,
-        userId: localUserId,
         message: text,
       });
       if (data.session_id) {
@@ -178,10 +191,39 @@ const App: React.FC = () => {
   }
 
   useEffect(() => {
-    void loadSessions();
+    (async () => {
+      try {
+        const u = await me();
+        setCurrentUser(u);
+        await loadSessions();
+        await loadSkills();
+      } catch {
+        setCurrentUser(null);
+      } finally {
+        setAuthChecked(true);
+      }
+    })();
     void loadConfig();
-    void loadSkills();
   }, []);
+
+  async function handleLogin(username: string, password: string) {
+    const u = await login(username, password);
+    setCurrentUser(u);
+    await loadSessions();
+    await loadSkills();
+    setActiveTab("chat");
+  }
+
+  async function handleRegister(username: string, password: string) {
+    await register(username, password);
+  }
+
+  async function handleLogout() {
+    await logout();
+    setCurrentUser(null);
+    setSessions([]);
+    setMessages([]);
+  }
 
   return (
     <div className="bg-slate-900 text-slate-100 min-h-screen flex flex-col">
@@ -189,8 +231,13 @@ const App: React.FC = () => {
         <div className="flex items-center gap-3">
           <span className="font-semibold text-lg">漏洞扫描 Agent</span>
           <span className="text-slate-400 text-sm">Skill · 工具 · 会话</span>
+          {currentUser && (
+            <span className="text-xs text-slate-400 border border-slate-600 rounded-full px-2 py-0.5">
+              用户：<span className="text-slate-100">{currentUser.username}</span>
+            </span>
+          )}
         </div>
-        <nav className="flex items-center gap-1 text-sm">
+        <nav className="flex items-center gap-3 text-sm">
           <button
             type="button"
             className={
@@ -227,14 +274,34 @@ const App: React.FC = () => {
           >
             设置
           </button>
+          <div className="h-5 w-px bg-slate-700" />
+          <div className="flex items-center gap-2">
+            {currentUser ? (
+              <>
+                <span className="text-xs text-slate-300">
+                  已登录：{currentUser.username}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="px-2 py-1 text-xs rounded-full border border-slate-600 text-slate-200 hover:bg-slate-800"
+                >
+                  退出
+                </button>
+              </>
+            ) : (
+              <AuthDialogs
+                onLogin={handleLogin}
+                onRegister={handleRegister}
+              />
+            )}
+          </div>
         </nav>
       </header>
 
       {activeTab === "chat" && (
         <div className="flex flex-1 min-h-0">
           <Sidebar
-            userId={userId}
-            onUserIdChange={setUserId}
             sessions={sessions}
             currentSessionId={currentSessionId}
             onNewChat={handleNewChat}

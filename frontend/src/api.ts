@@ -1,4 +1,11 @@
-import type { ChatMessage, LlmConfig, SessionSummary, SkillSummary, ToolCall } from "./types";
+import type {
+  AuthUser,
+  ChatMessage,
+  LlmConfig,
+  SessionSummary,
+  SkillSummary,
+  ToolCall,
+} from "./types";
 
 const API_BASE = "";
 
@@ -18,11 +25,8 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   return data;
 }
 
-export async function fetchSessions(userId: string): Promise<SessionSummary[]> {
-  const uid = (userId || "").trim() || "default";
-  const data = await fetchJson<{ sessions: SessionSummary[] }>(
-    `/api/sessions?user_id=${encodeURIComponent(uid)}`,
-  );
+export async function fetchSessions(): Promise<SessionSummary[]> {
+  const data = await fetchJson<{ sessions: SessionSummary[] }>("/api/sessions");
   return data.sessions || [];
 }
 
@@ -33,20 +37,17 @@ export async function fetchHistory(sessionId: string): Promise<ChatMessage[]> {
   return (data.messages || []) as ChatMessage[];
 }
 
-export async function deleteSessionApi(sessionId: string, userId: string): Promise<void> {
-  const uid = (userId || "").trim() || "default";
-  await fetchJson(
-    `/api/sessions/${encodeURIComponent(sessionId)}?user_id=${encodeURIComponent(uid)}`,
-    { method: "DELETE" },
-  );
+export async function deleteSessionApi(sessionId: string): Promise<void> {
+  await fetchJson(`/api/sessions/${encodeURIComponent(sessionId)}`, {
+    method: "DELETE",
+  });
 }
 
 export async function sendChat(
-  params: { sessionId?: string; userId?: string; message: string },
+  params: { sessionId?: string; message: string },
 ): Promise<{ session_id: string; reply: string; tool_calls?: ToolCall[] }> {
   const body = {
     session_id: params.sessionId || undefined,
-    user_id: params.userId || undefined,
     message: params.message,
   };
   return fetchJson("/api/chat", {
@@ -87,5 +88,27 @@ export async function fetchModels(params?: {
 export async function fetchSkills(): Promise<SkillSummary[]> {
   const data = await fetchJson<SkillSummary[]>("/api/skills");
   return data;
+}
+
+export async function register(username: string, password: string): Promise<AuthUser> {
+  return fetchJson<AuthUser>("/api/auth/register", {
+    method: "POST",
+    body: JSON.stringify({ username, password }),
+  });
+}
+
+export async function login(username: string, password: string): Promise<AuthUser> {
+  return fetchJson<AuthUser>("/api/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ username, password }),
+  });
+}
+
+export async function logout(): Promise<void> {
+  await fetchJson("/api/auth/logout", { method: "POST" });
+}
+
+export async function me(): Promise<AuthUser> {
+  return fetchJson<AuthUser>("/api/auth/me");
 }
 

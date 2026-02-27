@@ -2,9 +2,6 @@ import React from "react";
 import type { SessionSummary } from "../types";
 
 export type SidebarProps = {
-  userId: string;
-  onUserIdChange: (value: string) => void;
-
   sessions: SessionSummary[];
   currentSessionId: string;
   onNewChat: () => void;
@@ -14,8 +11,6 @@ export type SidebarProps = {
 };
 
 export const Sidebar: React.FC<SidebarProps> = ({
-  userId,
-  onUserIdChange,
   sessions,
   currentSessionId,
   onNewChat,
@@ -25,17 +20,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   return (
     <aside className="w-72 border-r border-slate-700 flex flex-col shrink-0 bg-slate-800/50">
-      <div className="p-3 border-b border-slate-700 space-y-2">
-        <div>
-          <label className="block text-xs text-slate-400 mb-1">用户 ID</label>
-          <input
-            value={userId}
-            onChange={(e) => onUserIdChange(e.target.value)}
-            placeholder="default"
-            className="w-full rounded-lg bg-slate-700 border border-slate-600 px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
-          />
-        </div>
-      </div>
+      <div className="p-3 border-b border-slate-700 space-y-2"></div>
 
       <div className="p-3 border-b border-slate-700">
         <button

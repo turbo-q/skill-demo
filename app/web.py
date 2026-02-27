@@ -11,14 +11,24 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Response, status
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from app.db import init_db
+from app.auth import (
+    PASSWORD_MIN_LENGTH,
+    clear_auth_cookie,
+    create_session,
+    get_current_user,
+    hash_password,
+    set_auth_cookie,
+    verify_password,
+)
+from app.db import get_db_session, init_db
 from app.run import run
 from app.storage import get_storage_manager, initialize_storage
 import yaml
+from app.models import UserModel
 
 init_db()
 
@@ -45,8 +55,6 @@ app = FastAPI(
 
 
 class ChatRequest(BaseModel):
-    session_id: Optional[str] = None
-    user_id: Optional[str] = None
     message: str
 
 
@@ -69,12 +77,12 @@ class LlmConfigUpdate(BaseModel):
 
 
 @app.post("/api/chat", response_model=ChatResponse)
-async def chat(body: ChatRequest):
+async def chat(body: ChatRequest, current_user: UserModel = Depends(get_current_user)):
     if not (body.message or "").strip():
         raise HTTPException(status_code=400, detail="message 不能为空")
     metadata = {
-        "session_id": body.session_id,
-        "user_id": body.user_id or "default",
+        "session_id": None,
+        "user_id": current_user.username,
     }
     session_id, reply, tool_calls = await run(body.message.strip(), metadata)
     return ChatResponse(session_id=session_id, reply=reply, tool_calls=tool_calls)
@@ -120,6 +128,15 @@ class SkillSummary(BaseModel):
     tags: list[str]
 
 
+class AuthRequest(BaseModel):
+    username: str
+    password: str
+
+
+class AuthUserResponse(BaseModel):
+    username: str
+
+
 @app.get("/api/config/models")
 async def list_models_from_config():
     """根据已保存的 base_url / api_key 拉取模型列表。"""
@@ -149,21 +166,59 @@ async def list_models_with_credentials(body: ModelsRequest):
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@app.post("/api/auth/register", response_model=AuthUserResponse)
+async def register(body: AuthRequest, db=Depends(get_db_session)):
+    username = body.username.strip()
+    if not username:
+        raise HTTPException(status_code=400, detail="用户名不能为空")
+    if len(body.password) < PASSWORD_MIN_LENGTH:
+        raise HTTPException(status_code=400, detail=f"密码长度至少为 {PASSWORD_MIN_LENGTH} 位")
+    exists = db.query(UserModel).filter(UserModel.username == username).one_or_none()
+    if exists:
+        raise HTTPException(status_code=400, detail="用户名已存在")
+    user = UserModel(username=username, password_hash=hash_password(body.password))
+    db.add(user)
+    db.flush()
+    return AuthUserResponse(username=user.username)
+
+
+@app.post("/api/auth/login", response_model=AuthUserResponse)
+async def login(body: AuthRequest, response: Response, db=Depends(get_db_session)):
+    username = body.username.strip()
+    if not username:
+        raise HTTPException(status_code=400, detail="用户名不能为空")
+    user = db.query(UserModel).filter(UserModel.username == username).one_or_none()
+    if not user or not verify_password(body.password, user.password_hash):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="用户名或密码错误")
+    token = create_session(db, user)
+    set_auth_cookie(response, token)
+    return AuthUserResponse(username=user.username)
+
+
+@app.post("/api/auth/logout")
+async def logout(response: Response, current_user: UserModel = Depends(get_current_user)):
+    clear_auth_cookie(response)
+    return {"ok": True}
+
+
+@app.get("/api/auth/me", response_model=AuthUserResponse)
+async def me(current_user: UserModel = Depends(get_current_user)):
+    return AuthUserResponse(username=current_user.username)
+
+
 @app.get("/api/sessions")
-async def list_sessions(user_id: str = "default", limit: int = 20, offset: int = 0):
+async def list_sessions(limit: int = 20, offset: int = 0, current_user: UserModel = Depends(get_current_user)):
     storage = get_storage_manager()
-    sessions, total = await storage.backend.list_user_sessions(user_id, limit=limit, offset=offset)
-    return {"user_id": user_id, "total": total, "sessions": sessions}
+    sessions, total = await storage.backend.list_user_sessions(current_user.username, limit=limit, offset=offset)
+    return {"user_id": current_user.username, "total": total, "sessions": sessions}
 
 
 @app.delete("/api/sessions/{session_id}")
-async def delete_session(session_id: str, user_id: str = "default"):
-    """删除该会话及其全部消息，彻底清除。仅当会话属于当前 user_id 时允许删除。"""
+async def delete_session(session_id: str, current_user: UserModel = Depends(get_current_user)):
+    """删除该会话及其全部消息，彻底清除。仅当会话属于当前用户时允许删除。"""
     storage = get_storage_manager()
     ctx = await storage.context.get_session(session_id)
-    if not ctx:
-        raise HTTPException(status_code=404, detail="会话不存在")
-    if ctx.user_id != user_id:
+    if not ctx or ctx.user_id != current_user.username:
         raise HTTPException(status_code=404, detail="会话不存在")
     ok = await storage.backend.delete_session(session_id)
     if not ok:
@@ -172,8 +227,11 @@ async def delete_session(session_id: str, user_id: str = "default"):
 
 
 @app.get("/api/history")
-async def history(session_id: str, limit: int = 50):
+async def history(session_id: str, limit: int = 50, current_user: UserModel = Depends(get_current_user)):
     storage = get_storage_manager()
+    ctx = await storage.context.get_session(session_id)
+    if not ctx or ctx.user_id != current_user.username:
+        raise HTTPException(status_code=404, detail="会话不存在")
     messages = await storage.context.get_conversation_history(session_id, limit=limit)
     return {
         "session_id": session_id,
@@ -182,8 +240,8 @@ async def history(session_id: str, limit: int = 50):
 
 
 @app.get("/api/skills", response_model=list[SkillSummary])
-async def list_skills() -> list[SkillSummary]:
-    """从 app/skills 目录读取 SKILL.md，返回技能列表（不依赖数据库）。"""
+async def list_skills(current_user: UserModel = Depends(get_current_user)) -> list[SkillSummary]:
+    """从 app/skills 目录读取 SKILL.md，返回技能列表（不依赖数据库）。需要登录。"""
     skills_dir = Path(__file__).resolve().parent / "skills"
     results: list[SkillSummary] = []
     if not skills_dir.is_dir():

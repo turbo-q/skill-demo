@@ -31,3 +31,7 @@ export type SkillSummary = {
   tags: string[];
 };
 
+export type AuthUser = {
+  username: string;
+};
+
